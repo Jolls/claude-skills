@@ -5,6 +5,9 @@ description: Use when kicking off a GitHub issue evaluation (typically in a chea
 
 # Evaluate issue → recommend the manager session
 
+> Source: [Jolls/claude-skills](https://github.com/Jolls/claude-skills) (`skills/evaluate-issue`)
+> — specialize downstream copies per-project; sync generic fixes both ways.
+
 Your job: scope a GitHub issue and tell the user what model + reasoning level to run the **manager** (implementation) session at, and whether sub-agents would help. **Do not write code, branches, or a plan** — read, assess, recommend. Keep it cheap.
 
 ## Steps
