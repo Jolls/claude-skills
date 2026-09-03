@@ -42,6 +42,7 @@ Recommend **yes** when the work splits into independent parallel parts (broad se
 
 ## Guardrails
 
+- This step runs directly in the current session — never delegate the read/evaluation to a sub-agent.
 - Recommend; don't implement. No edits, no branch, no commits from this session.
 - Base the call on evidence from the issue and code, not the issue title alone.
 - When genuinely on the fence between two levels, name both and say which you'd pick.
