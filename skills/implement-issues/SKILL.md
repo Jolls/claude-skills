@@ -16,6 +16,8 @@ cumulative tip and approves. Git choreography happens once, at land time.
 ```
 0. Confirm groups + apply order (dependency first).
 1. /evaluate-issue every issue (REQUIRED) → model/level for each planning agent.
+   If an issue isn't specific enough to plan without judgment calls, run
+   /update-issue on it first, then re-evaluate.
 2. Parallel planning agents, one per group → plan files with zero judgment calls.
 3. Resolve every "Open question" with the user; write the decision into the plan.
 4. One branch off main; per group: apply edits + build/test + a low-effort code review — UNCOMMITTED.
@@ -36,6 +38,13 @@ Run `/evaluate-issue <NNN>` (Skill tool) for every issue — **required**; it se
 the model/level for each group's planning agent. For a bundled group, evaluate
 each member, then give one combined recommendation: model = higher-tier if *any*
 member trips it; level = max of members' (or name both and pick if on the fence).
+
+**If you (the manager) judge an issue isn't specific enough to hand a planning
+agent** — ambiguous scope, missing acceptance criteria, conflicting comments,
+anything that would force the agent to make a judgment call step 2 says it
+shouldn't make — run `/update-issue <NNN>` (Skill tool) on it before planning.
+Let that skill's own clarification/confirmation flow run with the user, then
+re-run `/evaluate-issue` on the updated issue before proceeding to step 2.
 
 ## 2. Plan each group with a dedicated agent — in parallel
 
