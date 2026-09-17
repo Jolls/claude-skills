@@ -5,6 +5,9 @@ description: Use when a PR was just merged and deleted on the remote, to return 
 
 # Post-Merge Cleanup
 
+> Source: [Jolls/claude-skills](https://github.com/Jolls/claude-skills) (`skills/done`)
+> — specialize downstream copies per-project; sync generic fixes both ways.
+
 ## Overview
 After a PR merges and its remote branch is deleted, sync local `main` and remove the now-stale local feature branch(es). **Local only** — never runs `git push --delete` or any command that deletes a branch on the remote.
 

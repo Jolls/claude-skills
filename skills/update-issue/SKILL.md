@@ -5,6 +5,9 @@ description: Use when the user wants to clarify and rewrite one or more GitHub i
 
 # Update issue → clarify, then rewrite
 
+> Source: [Jolls/claude-skills](https://github.com/Jolls/claude-skills) (`skills/update-issue`)
+> — specialize downstream copies per-project; sync generic fixes both ways.
+
 Your job: take a vague or stale GitHub issue and turn it into a title/body that unambiguously says what's wanted, with the user's sign-off at each step. **Do not implement anything, and do not touch assignees/state (open/closed)** — this skill clarifies and rewrites issue text, labels, and milestone only.
 
 Uses the current repo (`gh` infers it from the working directory) unless the user names a different one.
@@ -18,6 +21,8 @@ Uses the current repo (`gh` infers it from the working directory) unless the use
    If this comes back empty, the pager likely swallowed it — plain-text `view` (no `--json`) can silently return nothing on some setups; the `--json` form above avoids it.
 
 2. **Form your own reading.** Work out what you think the issue is asking for — bug report, feature request, task — and whether it reads as one clear thing or several plausible things. Use the comments too; often the real ask evolved there and the original body is stale.
+
+   Then do a bounded sanity check against the current codebase — a handful of grep/read calls, not a survey: confirm the files/functions/entities the issue names still exist under those names, and check whether an adjacent variant already in the app (an existing edit/update path, an existing alternate format, a related batch flow) means the request as worded is silent on a case that determines what's actually being asked for. This is about understanding the *request*, not designing the fix — stop once you know what the user wants; leave "how to build it" to the implementation step. Skip this entirely for issues that are pure wording/process cleanup with no code-facing claim.
 
 3. **Show the issue as-is, then clarify.** Immediately before your first `AskUserQuestion` round, print the current title and body back to the user as a clean markdown block, e.g.:
    ```
