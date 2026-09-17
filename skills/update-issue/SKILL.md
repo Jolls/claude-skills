@@ -1,11 +1,11 @@
 ---
 name: update-issue
-description: Use when the user wants to clarify and rewrite one or more GitHub issues before implementation — e.g. "/update-issue 123", "update issue #45", "clean up issues 12 34 56", "the wording on #90 is unclear, can you fix it up". Interviews the user to resolve ambiguity in an issue's intent, weighs whether the ask is worth doing, then proposes a rewritten title/body plus label changes and asks before pushing to GitHub. Does not implement the issue or touch milestone/assignees/state.
+description: Use when the user wants to clarify and rewrite one or more GitHub issues before implementation — e.g. "/update-issue 123", "update issue #45", "clean up issues 12 34 56", "the wording on #90 is unclear, can you fix it up". Interviews the user to resolve ambiguity in an issue's intent, weighs whether the ask is worth doing, then proposes a rewritten title/body, labels, and milestone and asks before pushing to GitHub. Does not implement the issue or touch assignees/state.
 ---
 
 # Update issue → clarify, then rewrite
 
-Your job: take a vague or stale GitHub issue and turn it into a title/body that unambiguously says what's wanted, with the user's sign-off at each step. **Do not implement anything, and do not touch milestone/assignees/state (open/closed)** — this skill clarifies and rewrites issue text and labels only.
+Your job: take a vague or stale GitHub issue and turn it into a title/body that unambiguously says what's wanted, with the user's sign-off at each step. **Do not implement anything, and do not touch assignees/state (open/closed)** — this skill clarifies and rewrites issue text, labels, and milestone only.
 
 Uses the current repo (`gh` infers it from the working directory) unless the user names a different one.
 
@@ -32,22 +32,25 @@ Uses the current repo (`gh` infers it from the working directory) unless the use
 
 5. **Present the rewrite.** Show the user the proposed title and body as you'd actually write it back — GitHub-flavored markdown, concise, structured (e.g. problem/expected-behavior for a bug, motivation/proposal for a feature). This is a rewrite of the issue's own text reflecting what you both just clarified, not a design doc or implementation plan. Alongside it, propose label changes: check the repo's existing label set (`gh label list`) and this issue's current labels, and suggest additions/removals that now fit the clarified ask (severity, area/component, type) — carry forward labels that still fit, drop ones that no longer do, and add ones that are clearly missing. If the repo has no discernible label convention, skip this rather than inventing one.
 
-6. **Confirm before writing.** `AskUserQuestion`: update the issue now (text + labels), revise the rewrite further, or drop this issue and move to the next one. Loop back to step 5 on a revise.
+6. **Ask about milestone.** Fetch the repo's open milestones (`gh api repos/{owner}/{repo}/milestones --jq '.[].title'`, filling in the current repo) and ask the user which one this issue belongs to via `AskUserQuestion`. **Always include "No milestone" as an option**, even when the issue currently has one assigned — moving an issue off its milestone is a legitimate answer, not just leaving it unset. If there are more milestones than fit in one question, offer the most plausible few (favor the issue's current milestone and whichever milestone its clarified scope fits) plus "No milestone"; the user can always type a different one via "Other". If the repo has no milestones at all, skip this step.
 
-7. **Push the update.** On approval, write the body to a temp file first — inline heredocs/here-strings for multi-line `gh` args are prone to getting garbled by the shell, so go through `--body-file` rather than passing the body inline. Apply the title/body and label changes together:
-   ```
-   gh issue edit <N> --title "<new title>" --body-file <tmpfile> --add-label "<label>" --remove-label "<label>"
-   ```
-   Repeat `--add-label`/`--remove-label` per label changed; omit either flag entirely if there's nothing to add or remove. Use a scratch/temp directory for the body file, not the repo itself.
+7. **Confirm before writing.** `AskUserQuestion`: update the issue now (text + labels + milestone), revise the rewrite further, or drop this issue and move to the next one. Loop back to step 5 on a revise.
 
-8. **Move to the next issue number**, if more were given. Each issue gets its own full pass through steps 1-7 — don't batch clarification or confirmation across issues; a user answer about issue #12 shouldn't be assumed to apply to #34.
+8. **Push the update.** On approval, write the body to a temp file first — inline heredocs/here-strings for multi-line `gh` args are prone to getting garbled by the shell, so go through `--body-file` rather than passing the body inline. Apply the title/body, label, and milestone changes together:
+   ```
+   gh issue edit <N> --title "<new title>" --body-file <tmpfile> --add-label "<label>" --remove-label "<label>" --milestone "<name>"
+   ```
+   Repeat `--add-label`/`--remove-label` per label changed; omit either flag entirely if there's nothing to add or remove. For "No milestone", use `--remove-milestone` instead of `--milestone`. Use a scratch/temp directory for the body file, not the repo itself.
+
+9. **Move to the next issue number**, if more were given. Each issue gets its own full pass through steps 1-8 — don't batch clarification or confirmation across issues; a user answer about issue #12 shouldn't be assumed to apply to #34.
 
 ## Guardrails
 
-- Never touch milestone, assignees, or state (open/closed) — title, body, and labels only.
+- Never touch assignees or state (open/closed) — title, body, labels, and milestone only.
 - Never skip the clarification round in step 3 because the issue "looks clear enough" if there's any real ambiguity — a wrong guess here costs more than one more question.
 - Step 4's benefit check is a prompt to think and flag, not an excuse to unilaterally close or downgrade an issue — that decision stays with the user.
-- Never call `gh issue edit` without explicit approval in step 6, even if earlier answers seemed to imply consent.
+- Step 6's milestone question always offers "No milestone" — never assume an issue should stay on its current milestone (or get one at all) without asking.
+- Never call `gh issue edit` without explicit approval in step 7, even if earlier answers seemed to imply consent.
 - If `gh` isn't authenticated or the issue number doesn't exist, say so and stop rather than guessing.
 
 ## Adapting this skill to your project
@@ -55,4 +58,4 @@ Uses the current repo (`gh` infers it from the working directory) unless the use
 This skill is generic on purpose. Two places benefit from project-specific context if you have it (in your project's CLAUDE.md or similar):
 
 - **Label taxonomy** — if your repo has a defined severity/area/type label scheme, document it so step 5 proposes labels consistently instead of re-deriving conventions each run.
-- **"Worth doing" signal** — if you have a roadmap doc, milestone plan, or similar, point step 4 at it so the benefit check has something concrete to weigh a clarified ask against.
+- **"Worth doing" signal** — if you have a roadmap doc, milestone plan, or similar, point step 4 at it so the benefit check has something concrete to weigh a clarified ask against. The same doc is often useful context for step 6's milestone question too.
