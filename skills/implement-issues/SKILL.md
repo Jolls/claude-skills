@@ -1,6 +1,6 @@
 ---
 name: implement-issues
-description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one scoped, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues", "do the same for issues X and Y". Covers: /evaluate-issue per issue → parallel planning agents → resolve open questions with the user → sequential implementation on one branch left uncommitted (spot-checked with a low-effort code review per group) → human tests the tip → on approval, commit and open one combined PR to main. Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
+description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one scoped, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues", "do the same for issues X and Y". Covers: /evaluate-issue per issue → parallel planning agents → resolve open questions with the user → sequential test-first implementation on one branch left uncommitted (characterization tests, then failing tests, then the change; spot-checked with a low-effort code review per group) → human tests the tip → on approval, commit and open one combined PR to main. Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
 ---
 
 # Implement a batch of issues on one branch, one combined PR
@@ -14,6 +14,12 @@ sequential in **one working tree on one branch** — apply group 1's edits, then
 group 2 on top, etc., all left **uncommitted** until the human tests the
 cumulative tip and approves. Git choreography happens once, at land time.
 
+Each group is built **test-first**: pin down current behavior the change could
+break, write tests that fail before the change and pass after, then make the
+change. The point is to shrink what the human has to test by hand — a big
+batch is hard to click through, but whatever the tests prove doesn't need
+clicking.
+
 ## Flow at a glance
 
 ```
@@ -21,10 +27,12 @@ cumulative tip and approves. Git choreography happens once, at land time.
 1. /evaluate-issue every issue (REQUIRED) → model/level for each planning agent.
    If an issue isn't specific enough to plan without judgment calls, run
    /update-issue on it first, then re-evaluate.
-2. Parallel planning agents, one per group → plan files with zero judgment calls.
+2. Parallel planning agents, one per group → plan files (with a Test plan) and zero judgment calls.
 3. Resolve every "Open question" with the user; write the decision into the plan.
-4. One branch off main; per group: apply edits + build/test + a low-effort code review — UNCOMMITTED.
-5. Human tests the tip (working tree); recommend pre-commit checks; get go-ahead.
+4. One branch off main; per group: characterization tests (pass) → red tests
+   (fail) → change (all pass) → a low-effort code review — UNCOMMITTED.
+   Optional per-group human checkpoint.
+5. Human tests the tip (manual-only items); recommend pre-commit checks; get go-ahead.
 6. Commit (disjoint-guarded), push, one combined PR to main.
 7. /done after merge.
 ```
@@ -34,6 +42,10 @@ cumulative tip and approves. Git choreography happens once, at land time.
 Respect any order the user gave (e.g. "752 → [753+755] → 754"). Otherwise
 propose one (dependency first, else ascending risk/issue number) and confirm
 before spending tokens on planning.
+
+Also ask whether the user wants a **per-group checkpoint** (pause after each
+group for a quick manual check, see step 4) or only the end-of-batch test.
+Recommend it for large batches or groups with a lot of manual-only surface.
 
 ## 1. Evaluate each group
 
@@ -61,6 +73,20 @@ model/level `/evaluate-issue` recommended. Prompt each with:
   project keeps implementation plans — adjust to match).
 - Read the actual current code at every referenced location before writing —
   issue text describing line numbers goes stale.
+- A **Test plan** section with four parts:
+  1. **Coverage audit** — existing tests that already cover the functions/
+     handlers the change touches (file + test name).
+  2. **Characterization tests** — new tests pinning *current* behavior the
+     change could break that nothing covers yet. Must pass on unchanged code.
+     Mark any that knowingly lock in a bug the change will fix.
+  3. **Red tests** — the issue's acceptance criteria as tests that fail on
+     current code and pass after the change. Name each test, what it asserts,
+     and why it fails today.
+  4. **Manual-only** — what can't reasonably be automated (visual layout,
+     client-side JS, OS dialogs, etc.), as short bullets.
+  If a test needs new fixture/seed data, list the exact rows and note the
+  human refresh step. If a group needs no tests, write `No tests: <stub
+  reason>` (e.g. "copy change only") — a few words, not a paragraph.
 - **Return only the plan path + open questions** — not the plan body, code
   excerpts, or investigation notes. The plan lives in the file; the manager
   reads it from disk in step 4. Path + open questions is all step 3 needs.
@@ -73,6 +99,10 @@ For each open question across all plans:
 - **Write the resolution into the plan file** as a "Resolved decision" with the
   exact change spec, so every plan is fully actionable with zero judgment calls
   left before you touch code.
+
+This is also the change-proposal review: the user's go-ahead on the plans
+covers writing the tests they list. `No tests: <reason>` needs no separate
+sign-off.
 
 ## 4. Implement sequentially on one branch — uncommitted
 
@@ -94,15 +124,29 @@ One branch off main for the whole batch:
 git checkout main
 git checkout -b feature/<batch-slug>
 ```
-Then per group in apply order:
-- Apply that group's exact plan edits.
-- Build/test using your project's normal commands. If the group touched
-  schema/migrations, or code covered by an integration/live-system test suite,
-  run that suite and report pass/fail — on a stale-fixture/seed-data failure,
-  ask the user to refresh it, never do that yourself.
-- Run a low-effort code review (e.g. `/code-review low`) on that group's
-  incremental diff **before the next group**; fix what it flags and re-verify.
-- **Do not commit** — leave everything in the working tree.
+Then per group in apply order, following its Test plan:
+1. **Characterization tests** — write them, run them against unchanged code.
+   They must **pass**. A failure means an existing bug or a wrong assumption:
+   stop and ask the user, don't fix it silently.
+2. **Red tests** — write them and run them. They must **fail on an
+   assertion**, for the reason the plan gives. A compile error doesn't count;
+   stub any new function/type signatures first so the test compiles and fails
+   on behavior. If a red test passes already, the plan is wrong — stop and ask.
+3. **Change** — apply the plan's edits until every test passes (flip any
+   characterization test the plan marked as locking in a bug). Build/test
+   using your project's normal commands.
+4. If the group touched schema/migrations, or code covered by an
+   integration/live-system test suite, run that suite and report pass/fail —
+   on a stale-fixture/seed-data failure (including seed rows the plan added),
+   ask the user to refresh it, never do that yourself.
+5. Run a low-effort code review (e.g. `/code-review low`) on that group's
+   incremental diff **before the next group**; fix what it flags and re-verify.
+6. If the user chose per-group checkpoints (step 0): pause, give that group's
+   manual-only items plus its golden path, and wait for the OK before the next
+   group.
+7. **Do not commit** — leave everything in the working tree.
+
+`No tests` groups skip 1–2.
 
 The working tree accumulates the whole batch uncommitted; the "tip" the human
 tests is just the working-tree state.
@@ -112,7 +156,10 @@ tests is just the working-tree state.
 Stop and let the user manually test the working tree (the full cumulative diff).
 Before handing off, give the user a bullet-point **manual test-points list**
 covering the whole batch (not per-group) so they know what to click through
-without re-reading every plan. Base it on the actual diff, not guesswork:
+without re-reading every plan. Base it on the actual diff, not guesswork.
+Behavior the tests already prove doesn't need a manual step — lead with the
+plans' manual-only items, list which tests cover the rest, and skip anything
+already checked at a per-group checkpoint unless a later group touched it:
 - **Screens/entry points touched**, with how to reach them (nav path, route,
   CLI command, etc.) — one bullet per entry point.
 - **New/changed UI or interface elements** to interact with: buttons, form
@@ -167,8 +214,9 @@ gh pr create --title "<summarize the batch>" --body-file <path>
 ```
 PR body: one bullet per issue's change, and `Closes #NNN` on its own line per
 issue (bare numbers after a comma don't auto-close). Test-plan checklist
-reflects what was verified: build/test + low-effort review per group, any
-deeper pass, and the human's manual test.
+reflects what was verified: tests added per group (characterization + red →
+green), build/test + low-effort review per group, any deeper pass, and the
+human's manual test.
 
 ## 7. Clean up
 

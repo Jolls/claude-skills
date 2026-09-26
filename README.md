@@ -17,8 +17,8 @@ cp -r skills/done <your-project>/.claude/skills/done
   stale local branch(es).
 - **evaluate-issue** — scope a GitHub issue and recommend the model/reasoning level (and whether
   sub-agents help) for the session that implements it. Recommends only, doesn't implement.
-- **implement-issues** — given a batch of GitHub issues, plan and implement them sequentially on
-  one branch, landing in a single combined PR.
+- **implement-issues** — given a batch of GitHub issues, plan and implement them sequentially and test-first
+  on one branch, landing in a single combined PR.
 - **update-issue** — clarify a vague/stale GitHub issue through an interview with the user, weigh
   whether it's worth doing, then rewrite its title/body and labels. Confirms with the user before
   pushing at each step; doesn't implement or touch milestone/assignees/state.
