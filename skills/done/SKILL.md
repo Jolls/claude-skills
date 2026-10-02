@@ -31,8 +31,13 @@ User says something like "merged and deleted", "clean up branches", "back to mai
    ```
    git branch -d <branch>
    ```
-   If `-d` refuses (unmerged), stop and confirm with the user before using `-D` — don't force-delete without asking, it can discard unmerged work.
+   `-d` also refuses branches merged via GitHub squash/rebase (the commits on main have different hashes). For a refused branch, verify it was merged with its tip intact before force-deleting:
+   ```
+   gh pr list --state merged --head <branch> --json number,headRefOid
+   git rev-parse <branch>
+   ```
+   Use `git branch -D <branch>` only if a merged PR's `headRefOid` equals the local tip (nothing unpushed or committed after the merge). Otherwise stop and confirm with the user — `-D` can discard unmerged work.
 
 ## Common Mistakes
-- Deleting a branch that isn't actually merged (`-d` will refuse — respect that refusal, don't reach for `-D` automatically).
+- Deleting a branch that isn't actually merged (`-d` will refuse — only escalate to `-D` after the merged-PR tip check in step 3).
 - Skipping `git fetch --prune` — without it, deleted remote branches don't show as `gone` and get missed.
