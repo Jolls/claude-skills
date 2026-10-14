@@ -8,223 +8,93 @@ description: Use when the user hands you a batch of GitHub issues (or a PR-slate
 > Source: [Jolls/claude-skills](https://github.com/Jolls/claude-skills) (`skills/implement-issues`)
 > — specialize downstream copies per-project; sync generic fixes both ways.
 
-The user gives a list of issues, optionally pre-grouped into PR units. Each
-**group** gets its own plan. Planning is the expensive part; implementation is
-sequential in **one working tree on one branch** — apply group 1's edits, then
-group 2 on top, etc., all left **uncommitted** until the human tests the
-cumulative tip and approves. Git choreography happens once, at land time.
-
-Each group is built **test-first**: pin down current behavior the change could
-break, write tests that fail before the change and pass after, then make the
-change. The point is to shrink what the human has to test by hand — a big
-batch is hard to click through, but whatever the tests prove doesn't need
-clicking.
-
-## Flow at a glance
-
-```
-0. Confirm groups + apply order (dependency first).
-1. /update-issue on every issue (REQUIRED).
-2. /evaluate-issue on every issue (REQUIRED) → model/level for each planning agent.
-3. Parallel planning agents, one per group → plan files (with a Test plan) and zero judgment calls.
-4. Resolve every "Open question" with the user; write the decision into the plan.
-5. One branch off main; plans moved into their issues (files deleted); per group: characterization tests (pass) → red tests
-   (fail) → change (all pass) → a low-effort code review — UNCOMMITTED.
-   Optional per-group human checkpoint.
-6. Human tests the tip (manual-only items); recommend pre-commit checks; get go-ahead.
-7. Commit (disjoint-guarded), push, one combined PR to main.
-8. /done after merge.
-```
+Each **group** (one issue, or a bundle that ships together) gets a plan. Implementation is sequential in **one working tree on one branch**, left **uncommitted** until the human tests the cumulative tip and approves. Each group is built **test-first**, so the human only clicks through what tests can't prove.
 
 ## 0. Confirm groups and order
 
-Respect any order the user gave (e.g. "752 → [753+755] → 754"). Otherwise
-propose one (dependency first, else ascending risk/issue number) and confirm
-before spending tokens on planning.
-
-Also ask whether the user wants a **per-group checkpoint** (pause after each
-group for a quick manual check, see step 5) or only the end-of-batch test.
-Recommend it for large batches or groups with a lot of manual-only surface.
+Respect the user's order (e.g. "752 → [753+755] → 754"); otherwise propose one (dependencies first, then ascending risk) and confirm before planning. Ask whether they want a **per-group checkpoint** (pause after each group for a manual check; recommend for large batches or lots of manual-only surface) or only the end-of-batch test.
 
 ## 1. Update each issue
 
-Run `/update-issue <NNN>` (Skill tool) on **every** issue — **required**, even
-if the issue looks clear. Let that skill's own clarification/confirmation flow
-run with the user so the issue is specific enough to plan without judgment calls
-(no ambiguous scope, missing acceptance criteria, or conflicting comments).
+Run `/update-issue <NNN>` on **every** issue, even clear ones, so each can be planned without judgment calls.
 
-## 2. Evaluate each group
+## 2. Evaluate each issue
 
-Run `/evaluate-issue <NNN>` (Skill tool) on every updated issue — **required**;
-it sets the model/level for each group's planning agent. For a bundled group,
-evaluate each member, then give one combined recommendation: model = higher-tier
-if *any* member trips it; level = max of members' (or name both and pick if on
-the fence).
+Run `/evaluate-issue <NNN>` on every issue; it sets the model/level for each group's planning agent. For a bundle, combine: model = higher tier if *any* member trips it; level = the highest (or name both and pick).
 
-## 3. Plan each group with a dedicated agent — in parallel
+## 3. Plan each group — parallel agents
 
-Launch one Agent per group in a single message (so they run in parallel) at the
-model/level `/evaluate-issue` recommended. Prompt each with:
-- The issue body/locations verbatim — don't make it re-fetch from `gh`.
-- This instruction: **"provide a plan with specific file changes to implement
-  the plan. The plan should only provide enough context needed to implement. No
-  judgement calls in the plan. If unsure, ask."**
-- Plan path: `docs/plans/<issue-id(s)>-<short-slug>.md` (or wherever your project keeps
-  implementation plans -- adjust to match). A scratch file while planning: step 5 moves it into
-  the issue and deletes it, so it is never committed.
-- Read the actual current code at every referenced location before writing —
-  issue text describing line numbers goes stale.
-- A **Test plan** section with four parts:
-  1. **Coverage audit** — existing tests that already cover the functions/
-     handlers the change touches (file + test name).
-  2. **Characterization tests** — new tests pinning *current* behavior the
-     change could break that nothing covers yet. Must pass on unchanged code.
-     Mark any that knowingly lock in a bug the change will fix.
-  3. **Red tests** — the issue's acceptance criteria as tests that fail on
-     current code and pass after the change. Name each test, what it asserts,
-     and why it fails today.
-  4. **Manual-only** — what can't reasonably be automated (visual layout,
-     client-side JS, OS dialogs, etc.), as short bullets.
-  If a test needs new fixture/seed data, list the exact rows and note the
-  human refresh step. If a group needs no tests, write `No tests: <stub
-  reason>` (e.g. "copy change only") — a few words, not a paragraph.
-- **Return only the plan path + open questions** — not the plan body, code
-  excerpts, or investigation notes. The plan lives in the file; the manager
-  reads it from disk in step 5. Path + open questions is all step 4 needs.
+Launch one Agent per group in a single message, at the recommended model/level. Prompt each with:
+- The issue body/locations verbatim (no `gh` re-fetch).
+- **"Provide a plan with specific file changes to implement the plan. Only enough context needed to implement. No judgement calls in the plan. If unsure, ask."**
+- Plan path `docs/plans/<issue-ids>-<slug>.md`. It's a scratch file: step 5 moves it into the issue and deletes it, so it is never committed.
+- Read the current code at every referenced location first; issue line numbers go stale.
+- A **Test plan** with four parts:
+  1. **Coverage audit:** existing tests covering what the change touches (file + test name).
+  2. **Characterization tests:** new tests pinning *current* behavior the change could break that nothing covers. Must pass on unchanged code. Mark any that lock in a bug the change fixes.
+  3. **Red tests:** acceptance criteria as tests that fail now and pass after. Name each, what it asserts, why it fails today.
+  4. **Manual-only:** what can't be automated (visual layout, client JS, OS dialogs), as short bullets.
+
+  List exact rows for any new fixture/seed data and note the human refresh step. If no tests are needed, write `No tests: <few-word reason>`.
+- **Return only the plan path + open questions**, not the plan body or investigation notes.
 
 ## 4. Resolve open questions
 
-For each open question across all plans:
-- Use `AskUserQuestion`, one per item, options as concrete choices (not yes/no),
-  recommended option first when you have one.
-- **Write the resolution into the plan file** as a "Resolved decision" with the
-  exact change spec, so every plan is fully actionable with zero judgment calls
-  left before you touch code.
+Ask each open question with `AskUserQuestion`, one per item, concrete options (not yes/no), recommended first. Write the answer into the plan as a "Resolved decision" with the exact change spec, so no judgment calls remain. The user's go-ahead on the plans also approves the tests they list; `No tests:` needs no separate sign-off.
 
-This is also the change-proposal review: the user's go-ahead on the plans
-covers writing the tests they list. `No tests: <reason>` needs no separate
-sign-off.
+## 5. Implement sequentially — uncommitted
 
-## 5. Implement sequentially on one branch — uncommitted
+Continue in this session; no sub-agent. If a plan needs much higher effort than this session (e.g. schema/auth-heavy), ask the user rather than implementing it at low effort.
 
-The session that ran steps 0-4 continues directly — **no sub-agent**; it already
-has the resolved plans and conventions loaded, and implementation is sequential
-so there's nothing to parallelize. This session is typically low-effort; if a
-plan wants a much higher level (e.g. a high-effort pass for a schema/auth-heavy
-group), ask the user rather than silently implementing complex work at low effort.
+**Unplanned judgment call:** don't guess. If it only needs the user's call, use `AskUserQuestion`. If framing the options needs investigation, spawn one narrow high-effort Agent for *that question only*, then ask.
 
-**Unplanned judgment call mid-implementation** — don't guess (effort is fixed
-per session):
-- **Just needs the user's call:** surface it via `AskUserQuestion`, as in step 4.
-- **Needs investigation to even frame the options** (tradeoffs, precedent, what
-  breaks): spawn one narrow high-effort Agent scoped to *that question only*,
-  then use its output to build the `AskUserQuestion`.
-
-One branch off main for the whole batch:
+Branch off main once for the whole batch:
 ```
 git checkout main
 git checkout -b feature/<batch-slug>
 ```
 
-**Move each plan into its issue** before the first group: post the plan file as a comment on its
-issue (`gh issue comment <N> --body-file docs/plans/<file>.md`; for a bundled group, comment on
-each member issue), then delete the file. The issue comment is the plan from here on -- if it
-changes mid-implementation, edit that comment rather than recreating a file. Plan files are never
-committed.
+**Move each plan into its issue** before the first group: `gh issue comment <N> --body-file docs/plans/<file>.md` (every member of a bundle), then delete the file. The comment is the plan from here on; edit it rather than recreating a file.
 
-Then per group in apply order, following its Test plan:
-1. **Characterization tests** — write them, run them against unchanged code.
-   They must **pass**. A failure means an existing bug or a wrong assumption:
-   stop and ask the user, don't fix it silently.
-2. **Red tests** — write them and run them. They must **fail on an
-   assertion**, for the reason the plan gives. A compile error doesn't count;
-   stub any new function/type signatures first so the test compiles and fails
-   on behavior. If a red test passes already, the plan is wrong — stop and ask.
-3. **Change** — apply the plan's edits until every test passes (flip any
-   characterization test the plan marked as locking in a bug). Build/test
-   using your project's normal commands.
-4. If the group touched schema/migrations, or code covered by an
-   integration/live-system test suite, run that suite and report pass/fail —
-   on a stale-fixture/seed-data failure (including seed rows the plan added),
-   ask the user to refresh it, never do that yourself.
-5. Run a low-effort code review (e.g. `/code-review low`) on that group's
-   incremental diff **before the next group**; fix what it flags and re-verify.
-6. If the user chose per-group checkpoints (step 0): pause, give that group's
-   manual-only items plus its golden path, and wait for the OK before the next
-   group.
-7. **Do not commit** — leave everything in the working tree.
+Then per group, in apply order:
+1. **Characterization tests:** write and run against unchanged code. They must **pass**; a failure is an existing bug or wrong assumption, so stop and ask.
+2. **Red tests:** write and run. They must **fail on an assertion** for the plan's reason. Stub new signatures first so a compile error doesn't count. A red test that already passes means the plan is wrong; stop and ask.
+3. **Change:** apply the plan's edits until everything passes (flip any characterization test the plan marked as locking in a bug).
+4. If the group touched schema/migrations or code covered by an integration suite, run that suite and report pass/fail. On a stale-fixture/seed failure, ask the user to refresh it; never do it yourself.
+5. Run `/code-review low` on the group's incremental diff **before the next group**; fix what it flags and re-verify.
+6. With per-group checkpoints: pause, give the group's manual-only items and golden path, and wait for the OK.
+7. **Do not commit.**
 
-`No tests` groups skip 1–2.
+`No tests` groups skip 1-2.
 
-The working tree accumulates the whole batch uncommitted; the "tip" the human
-tests is just the working-tree state.
+## 6. Human tests the tip
 
-## 6. Human tests the tip, then recommend pre-commit checks
+Before handing off, give a bullet **manual test-points list** for the whole batch, based on the actual diff. Lead with the plans' manual-only items, note which tests cover the rest, and skip anything already checked at a checkpoint unless a later group touched it. Cover:
+- **Entry points touched** and how to reach each (route, nav path, CLI command).
+- **New/changed UI elements** and the expected result of each interaction.
+- **Golden path** per feature, end to end.
+- **Edge cases:** empty, duplicate, or bad input, permission boundaries, anything the plan's success criteria named.
+- **Cross-feature regressions:** features sharing the same data, handlers, or helpers.
+- **Observable state** to check afterward (row written, audit entry) when the UI doesn't show it.
+- Any special test mode/environment required.
 
-Stop and let the user manually test the working tree (the full cumulative diff).
-Before handing off, give the user a bullet-point **manual test-points list**
-covering the whole batch (not per-group) so they know what to click through
-without re-reading every plan. Base it on the actual diff, not guesswork.
-Behavior the tests already prove doesn't need a manual step — lead with the
-plans' manual-only items, list which tests cover the rest, and skip anything
-already checked at a per-group checkpoint unless a later group touched it:
-- **Screens/entry points touched**, with how to reach them (nav path, route,
-  CLI command, etc.) — one bullet per entry point.
-- **New/changed UI or interface elements** to interact with: buttons, form
-  fields, modals, filters, flags — what to do and what result to expect.
-- **Golden path** per feature: the normal, expected-to-work flow end to end.
-- **Edge cases / invalid inputs** worth poking: empty fields, duplicate values,
-  bad input types, permission boundaries — anything the plan's success criteria
-  called out.
-- **Cross-feature regressions**: existing features that touch the same
-  data/handlers/shared code and could break silently (e.g. a shared partial,
-  a modified helper used elsewhere).
-- **Observable-state checks**: what to look for after the action (row
-  inserted, field updated, log/audit entry written) if not obvious from the
-  UI alone.
-- If any group required a special test mode/environment, note that here so
-  the human doesn't test against the wrong target.
+Before any commit, recommend the checks the diff warrants: a deeper code review over the combined diff if it exceeds ~300 changed lines, spans multiple `internal/` packages, or touches anything AGENTS.md → "Issue triage" lists as schema/database or security-sensitive; integration tests if not already run; a `/simplify` pass if the batch introduced reuse or simplification opportunities. Run the chosen passes, summarize, fix. **Commit only on the user's go-ahead.**
 
-Before any commit, recommend the checks the diff warrants (per your project's
-documented pre-commit conventions, if any): a deeper code review over the whole
-combined diff if it exceeds ~300 changed lines, spans multiple `internal/` packages, or touches anything AGENTS.md → "Issue triage" lists as schema/database or security-sensitive (the
-per-group low-effort passes were spot checks), plus integration tests if not
-already run, plus a simplify/cleanup pass if the batch introduced any
-reuse/simplification/efficiency opportunity worth a quality-only pass. Run the
-chosen passes, summarize, fix. **Commit only on the user's go-ahead — never
-before.**
+## 7. On approval: commit, push, one combined PR
 
-## 7. On approval: commit (disjoint-guarded), push, one combined PR
-
-Check whether any file is touched by more than one group (you know each group's
-file list from its plan):
-- **All groups file-disjoint (normal):** commit per group, staging just that
-  group's files, so each issue gets a clean commit:
-  ```
-  git add <group 1 files>; git commit -F <msg citing issue 1>
-  git add <group 2 files>; git commit -F <msg citing issue 2>
-  ```
-- **Any file shared by ≥2 groups:** don't split it (whole-file staging can't
-  attribute lines; `git add -p` is interactive/blocked). Make **one commit for
-  the whole batch** — the correct move, not a workaround.
+If **no file is touched by more than one group** (known from the plans), commit per group, staging only that group's files, with a message citing its issue. Otherwise make **one commit for the batch**; `git add -p` is interactive and whole-file staging can't split a shared file.
 
 Commit hygiene:
-- Changelog: follow AGENTS.md → "Keep the changelog" — one new version heading for the PR,
-  all groups' changes under it, grouped by category.
-- Don't commit plan files -- they were moved into the issues in step 5.
+- Changelog: follow AGENTS.md → "Keep the changelog": one new version heading for the PR, all groups' changes under it, grouped by category.
+- Plan files were moved into the issues in step 5; don't commit them.
 - Don't tag; tagging happens at release.
 
-Push and open one PR (body file — here-strings/heredocs can garble multi-line
-content, prefer writing the body to a file first):
+Write the PR body to a file (heredocs garble multi-line content), then:
 ```
-git push -u origin feature/<batch-slug>   # then: git push --tags
+git push -u origin feature/<batch-slug>
 gh pr create --title "<summarize the batch>" --body-file <path>
 ```
-PR body: one bullet per issue's change, and `Closes #NNN` on its own line per
-issue (bare numbers after a comma don't auto-close). Test-plan checklist
-reflects what was verified: tests added per group (characterization + red →
-green), build/test + low-effort review per group, any deeper pass, and the
-human's manual test.
+PR body: one bullet per issue's change, `Closes #NNN` on its own line per issue (bare numbers after a comma don't auto-close), and a test-plan checklist of what was verified: tests per group (characterization + red → green), build/test and low-effort review per group, any deeper pass, and the human's manual test.
 
 ## 8. Clean up
 
