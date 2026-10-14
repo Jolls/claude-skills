@@ -11,9 +11,6 @@ description: Use when a PR was just merged and deleted on the remote, to return 
 ## Overview
 After a PR merges and its remote branch is deleted, sync local `main` and remove the now-stale local feature branch(es). **Local only** — never runs `git push --delete` or any command that deletes a branch on the remote.
 
-## When to Use
-User says something like "merged and deleted", "clean up branches", "back to main", or any request to tidy up local git state after a PR merge.
-
 ## Steps
 
 1. Switch to main and pull:
@@ -37,7 +34,3 @@ User says something like "merged and deleted", "clean up branches", "back to mai
    git rev-parse <branch>
    ```
    Use `git branch -D <branch>` only if a merged PR's `headRefOid` equals the local tip (nothing unpushed or committed after the merge). Otherwise stop and confirm with the user — `-D` can discard unmerged work.
-
-## Common Mistakes
-- Deleting a branch that isn't actually merged (`-d` will refuse — only escalate to `-D` after the merged-PR tip check in step 3).
-- Skipping `git fetch --prune` — without it, deleted remote branches don't show as `gone` and get missed.

@@ -8,14 +8,14 @@ description: Use when kicking off a GitHub issue evaluation (typically in a chea
 > Source: [Jolls/claude-skills](https://github.com/Jolls/claude-skills) (`skills/evaluate-issue`)
 > — specialize downstream copies per-project; sync generic fixes both ways.
 
-Your job: scope a GitHub issue and tell the user what model + reasoning level to run the **manager** (implementation) session at, and whether sub-agents would help. **Do not write code, branches, or a plan** — read, assess, recommend. Keep it cheap.
+Your job: scope a GitHub issue and tell the user what model + reasoning level to run the **manager** (implementation) session at, and whether sub-agents would help. Run directly in the current session — never delegate the read/evaluation to a sub-agent. **Recommend only:** no code, plan, edits, branch, or commits.
 
 ## Steps
 
 1. Read the issue: `gh issue view <NNN> --comments`. Note any labels (severity/area/type) and linked issues/PRs.
-2. Skim what it touches — grep/glob the referenced area(s); check whether it hits schema/migrations, auth/session/security-sensitive code, config/build plumbing, or spans multiple packages/modules.
+2. Skim what it touches — grep/glob the referenced area(s); check whether it hits schema/migrations, auth/session/security-sensitive code, config/build plumbing, or spans multiple packages/modules. AGENTS.md → "Issue triage" defines which paths count as schema, security-sensitive, and multi-package here.
 3. Map to the criteria below.
-4. Emit the recommendation block. Stop there.
+4. Emit the recommendation block, then stop.
 
 ## Output (exact shape)
 
@@ -24,14 +24,14 @@ Your job: scope a GitHub issue and tell the user what model + reasoning level to
 > **Why:** <one line tying the choice to what the issue touches>
 > **Watch-outs:** <optional — e.g. schema change ripples across multiple files; needs integration tests; needs a security review pass>
 
-## Model — higher-tier model if any apply, else the default/cheaper model
+## Model — higher-tier model (e.g. Opus) if any apply, else the default model (e.g. Sonnet)
 
 - Schema/database changes (new or altered tables/columns — ripples across config, migrations, seed data, docs)
 - Security-sensitive work — auth, CSRF, session, crypto
 - Cross-cutting architecture, or a refactor touching multiple packages/modules together
 - Subtle correctness where a wrong fix ships silently (high-severity bug in non-obvious logic)
 
-The default/cheaper model handles the rest: routine handlers, UI/template tweaks, single-file bug fixes, well-scoped features that follow an existing pattern, docs/changelog.
+The default model handles the rest: routine handlers, UI/template tweaks, single-file bug fixes, well-scoped features that follow an existing pattern, docs/changelog.
 
 ## Level — reasoning effort
 
@@ -45,11 +45,5 @@ Recommend **yes** when the work splits into independent parallel parts (broad se
 
 ## Guardrails
 
-- This step runs directly in the current session — never delegate the read/evaluation to a sub-agent.
-- Recommend; don't implement. No edits, no branch, no commits from this session.
 - Base the call on evidence from the issue and code, not the issue title alone.
 - When genuinely on the fence between two levels, name both and say which you'd pick.
-
-## Adapting this skill to your project
-
-This skill is generic on purpose. For best results, tell it (in your project's CLAUDE.md or similar) what counts as "schema/database," "security-sensitive," and "spans multiple packages" for your codebase — e.g. specific directories, label names, or file globs — so step 2 has concrete things to check.

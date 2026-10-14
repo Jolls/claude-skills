@@ -1,6 +1,6 @@
 ---
 name: implement-issues
-description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one scoped, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues", "do the same for issues X and Y". Covers: /update-issue then /evaluate-issue per issue → parallel planning agents → resolve open questions with the user → sequential test-first implementation on one branch left uncommitted (characterization tests, then failing tests, then the change; spot-checked with a low-effort code review per group) → human tests the tip → on approval, commit and open one combined PR to main. Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
+description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one updated, evaluated, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues". Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
 ---
 
 # Implement a batch of issues on one branch, one combined PR
@@ -187,7 +187,7 @@ already checked at a per-group checkpoint unless a later group touched it:
 
 Before any commit, recommend the checks the diff warrants (per your project's
 documented pre-commit conventions, if any): a deeper code review over the whole
-combined diff if it's large or touches schema/auth/cross-cutting concerns (the
+combined diff if it exceeds ~300 changed lines, spans multiple `internal/` packages, or touches anything AGENTS.md → "Issue triage" lists as schema/database or security-sensitive (the
 per-group low-effort passes were spot checks), plus integration tests if not
 already run, plus a simplify/cleanup pass if the batch introduced any
 reuse/simplification/efficiency opportunity worth a quality-only pass. Run the
@@ -209,10 +209,10 @@ file list from its plan):
   the whole batch** — the correct move, not a workaround.
 
 Commit hygiene:
-- Changelog (if your project keeps one): **one** entry, all groups' changes
-  grouped by category.
+- Changelog: follow AGENTS.md → "Keep the changelog" — one new version heading for the PR,
+  all groups' changes under it, grouped by category.
 - Don't commit plan files -- they were moved into the issues in step 5.
-- Tag the tip commit if your project uses version tags.
+- Don't tag; tagging happens at release.
 
 Push and open one PR (body file — here-strings/heredocs can garble multi-line
 content, prefer writing the body to a file first):
@@ -229,18 +229,3 @@ human's manual test.
 ## 8. Clean up
 
 Once the user confirms the PR is merged, run `/done`.
-
-## Notes
-
-- Apply order must put a dependency before the group that needs it (step 0) —
-  you build it up in one tree.
-- Keep each plan scoped to its own group.
-- If sequential implementation becomes the bottleneck (many groups, long
-  builds), reconsider — but default to single-branch unless the user asks.
-
-## Adapting this skill to your project
-
-This skill pairs with `/update-issue`, `/evaluate-issue`, and `/done` from this same repo, and
-assumes a `/code-review` (or similar) skill exists for the review passes — swap
-in whatever your project actually has. It also assumes GitHub issues/PRs via
-`gh`; adjust step 7 if your project uses a different tracker or PR flow.
