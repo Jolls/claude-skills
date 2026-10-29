@@ -1,6 +1,6 @@
 ---
 name: implement-issues
-description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one scoped, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues", "do the same for issues X and Y". Covers: /evaluate-issue per issue → parallel planning agents → resolve open questions with the user → sequential test-first implementation on one branch left uncommitted (characterization tests, then failing tests, then the change; spot-checked with a low-effort code review per group) → human tests the tip → on approval, commit and open one combined PR to main. Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
+description: Use when the user hands you a batch of GitHub issues (or a PR-slate grouping from an epic, e.g. "issue A → [B+C] → D") and wants each one scoped, planned, and implemented sequentially on a single branch, landing in one combined PR to main. Triggers on "evaluate and implement issues #NNN, #NNN", "work through the [epic] slate", "plan then implement these issues", "do the same for issues X and Y". Covers: /update-issue then /evaluate-issue per issue → parallel planning agents → resolve open questions with the user → sequential test-first implementation on one branch left uncommitted (characterization tests, then failing tests, then the change; spot-checked with a low-effort code review per group) → human tests the tip → on approval, commit and open one combined PR to main. Not for a single ad-hoc bug fix (just do it directly) or for planning without implementing (use /evaluate-issue or Plan Mode alone).
 ---
 
 # Implement a batch of issues on one branch, one combined PR
@@ -24,17 +24,16 @@ clicking.
 
 ```
 0. Confirm groups + apply order (dependency first).
-1. /evaluate-issue every issue (REQUIRED) → model/level for each planning agent.
-   If an issue isn't specific enough to plan without judgment calls, run
-   /update-issue on it first, then re-evaluate.
-2. Parallel planning agents, one per group → plan files (with a Test plan) and zero judgment calls.
-3. Resolve every "Open question" with the user; write the decision into the plan.
-4. One branch off main; per group: characterization tests (pass) → red tests
+1. /update-issue every issue.
+2. /evaluate-issue every issue → model/level for each planning agent.
+3. Parallel planning agents, one per group → plan files (with a Test plan) and zero judgment calls.
+4. Resolve every "Open question" with the user; write the decision into the plan.
+5. One branch off main; per group: characterization tests (pass) → red tests
    (fail) → change (all pass) → a low-effort code review — UNCOMMITTED.
    Optional per-group human checkpoint.
-5. Human tests the tip (manual-only items); recommend pre-commit checks; get go-ahead.
-6. Commit (disjoint-guarded), push, one combined PR to main.
-7. /done after merge.
+6. Human tests the tip (manual-only items); recommend pre-commit checks; get go-ahead.
+7. Commit (disjoint-guarded), push, one combined PR to main.
+8. /done after merge.
 ```
 
 ## 0. Confirm groups and order
@@ -44,24 +43,25 @@ propose one (dependency first, else ascending risk/issue number) and confirm
 before spending tokens on planning.
 
 Also ask whether the user wants a **per-group checkpoint** (pause after each
-group for a quick manual check, see step 4) or only the end-of-batch test.
+group for a quick manual check, see step 5) or only the end-of-batch test.
 Recommend it for large batches or groups with a lot of manual-only surface.
 
-## 1. Evaluate each group
+## 1. Update each issue
 
-Run `/evaluate-issue <NNN>` (Skill tool) for every issue — **required**; it sets
-the model/level for each group's planning agent. For a bundled group, evaluate
-each member, then give one combined recommendation: model = higher-tier if *any*
-member trips it; level = max of members' (or name both and pick if on the fence).
+Run `/update-issue <NNN>` (Skill tool) for every issue — **required**, before
+any evaluation. It clarifies and rewrites the issue so a planning agent isn't
+forced into the judgment calls step 3 says it shouldn't make (ambiguous scope,
+missing acceptance criteria, conflicting comments). Let that skill's own
+clarification/confirmation flow run with the user.
 
-**If you (the manager) judge an issue isn't specific enough to hand a planning
-agent** — ambiguous scope, missing acceptance criteria, conflicting comments,
-anything that would force the agent to make a judgment call step 2 says it
-shouldn't make — run `/update-issue <NNN>` (Skill tool) on it before planning.
-Let that skill's own clarification/confirmation flow run with the user, then
-re-run `/evaluate-issue` on the updated issue before proceeding to step 2.
+## 2. Evaluate each group
 
-## 2. Plan each group with a dedicated agent — in parallel
+Run `/evaluate-issue <NNN>` (Skill tool) for every issue on its updated text —
+**required**; it sets the model/level for each group's planning agent. For a bundled group, evaluate each member, then give one combined
+recommendation: model = higher-tier if *any* member trips it; level = max of
+members' (or name both and pick if on the fence).
+
+## 3. Plan each group with a dedicated agent — in parallel
 
 Launch one Agent per group in a single message (so they run in parallel) at the
 model/level `/evaluate-issue` recommended. Prompt each with:
@@ -89,9 +89,9 @@ model/level `/evaluate-issue` recommended. Prompt each with:
   reason>` (e.g. "copy change only") — a few words, not a paragraph.
 - **Return only the plan path + open questions** — not the plan body, code
   excerpts, or investigation notes. The plan lives in the file; the manager
-  reads it from disk in step 4. Path + open questions is all step 3 needs.
+  reads it from disk in step 5. Path + open questions is all step 4 needs.
 
-## 3. Resolve open questions
+## 4. Resolve open questions
 
 For each open question across all plans:
 - Use `AskUserQuestion`, one per item, options as concrete choices (not yes/no),
@@ -104,9 +104,9 @@ This is also the change-proposal review: the user's go-ahead on the plans
 covers writing the tests they list. `No tests: <reason>` needs no separate
 sign-off.
 
-## 4. Implement sequentially on one branch — uncommitted
+## 5. Implement sequentially on one branch — uncommitted
 
-The session that ran steps 0-3 continues directly — **no sub-agent**; it already
+The session that ran steps 0-4 continues directly — **no sub-agent**; it already
 has the resolved plans and conventions loaded, and implementation is sequential
 so there's nothing to parallelize. This session is typically low-effort; if a
 plan wants a much higher level (e.g. a high-effort pass for a schema/auth-heavy
@@ -114,7 +114,7 @@ group), ask the user rather than silently implementing complex work at low effor
 
 **Unplanned judgment call mid-implementation** — don't guess (effort is fixed
 per session):
-- **Just needs the user's call:** surface it via `AskUserQuestion`, as in step 3.
+- **Just needs the user's call:** surface it via `AskUserQuestion`, as in step 4.
 - **Needs investigation to even frame the options** (tradeoffs, precedent, what
   breaks): spawn one narrow high-effort Agent scoped to *that question only*,
   then use its output to build the `AskUserQuestion`.
@@ -151,7 +151,7 @@ Then per group in apply order, following its Test plan:
 The working tree accumulates the whole batch uncommitted; the "tip" the human
 tests is just the working-tree state.
 
-## 5. Human tests the tip, then recommend pre-commit checks
+## 6. Human tests the tip, then recommend pre-commit checks
 
 Stop and let the user manually test the working tree (the full cumulative diff).
 Before handing off, give the user a bullet-point **manual test-points list**
@@ -186,7 +186,7 @@ reuse/simplification/efficiency opportunity worth a quality-only pass. Run the
 chosen passes, summarize, fix. **Commit only on the user's go-ahead — never
 before.**
 
-## 6. On approval: commit (disjoint-guarded), push, one combined PR
+## 7. On approval: commit (disjoint-guarded), push, one combined PR
 
 Check whether any file is touched by more than one group (you know each group's
 file list from its plan):
@@ -218,7 +218,7 @@ reflects what was verified: tests added per group (characterization + red →
 green), build/test + low-effort review per group, any deeper pass, and the
 human's manual test.
 
-## 7. Clean up
+## 8. Clean up
 
 Once the user confirms the PR is merged, run `/done`.
 
@@ -235,4 +235,4 @@ Once the user confirms the PR is merged, run `/done`.
 This skill pairs with `/evaluate-issue` and `/done` from this same repo, and
 assumes a `/code-review` (or similar) skill exists for the review passes — swap
 in whatever your project actually has. It also assumes GitHub issues/PRs via
-`gh`; adjust step 6 if your project uses a different tracker or PR flow.
+`gh`; adjust step 7 if your project uses a different tracker or PR flow.
