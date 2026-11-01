@@ -12,6 +12,16 @@ Turn a vague or stale GitHub issue into a title/body that unambiguously says wha
 
 Uses the current repo unless the user names another. Label taxonomy and the "worth doing" signal come from AGENTS.md → "Issue triage" and ROADMAP.md.
 
+## Multiple issues: prep in parallel, ask one at a time
+
+With **two or more** issues, don't run the steps serially. First:
+
+1. Fetch the label list and open milestones once.
+2. Launch one Agent per issue in a single message, at a cheap model/effort (read-and-draft work). Each does steps 1, 2 and 4, must **not** ask the user or run `gh issue edit`, and writes a draft to a temp file outside the repo containing: the issue's current title/body/comments verbatim; the genuinely ambiguous points as questions with concrete options and a recommended one; any benefit-check flag; a proposed rewrite assuming the recommended options; proposed labels. It returns only the draft path.
+3. Then go through the issues **one at a time**, in the order given: read that issue's draft and run steps 3 and 5-8 from it. Never put two issues' questions in one `AskUserQuestion` round, and don't start the next issue's questions until this one is pushed or skipped.
+
+If an answer changes an issue's scope enough that the draft no longer fits, revise the rewrite yourself rather than relaunching the agent. With a single issue, skip this section.
+
 ## Steps (a full pass per issue number; never carry one issue's answers to another)
 
 1. **Read the issue:** `gh issue view <N> --json title,body,labels,comments,number`. Use `--json`; plain-text `view` can silently return nothing.
